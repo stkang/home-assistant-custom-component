@@ -1,0 +1,8 @@
+{
+    "domain": "enertalk",
+    "name": "enertalk",
+    "documentation": "https://www.home-assistant.io/components/sensor.enertalk",
+    "requirements": [],
+    "dependencies": [],
+    "codeowners": []
+}

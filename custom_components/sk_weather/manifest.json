@@ -1,0 +1,8 @@
+{
+    "domain": "sk_weather",
+    "name": "sk_weather",
+    "documentation": "https://www.home-assistant.io/components/sensor.sk_weather",
+    "requirements": [],
+    "dependencies": [],
+    "codeowners": []
+}
