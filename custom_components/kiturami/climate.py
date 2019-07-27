@@ -31,7 +31,8 @@ MIN_TEMP = 10
 HVAC_MODE_BATH = '목욕'
 STATE_HEAT = '난방'
 STATE_BATH = '목욕'
-STATE_RESERVATION = '예약'
+STATE_RESERVATION = '24시간 예약'
+STATE_RESERVATION_REPEAT = '반복 예약'
 STATE_AWAY = '외출'
 
 MIN_TIME_BETWEEN_UPDATES = timedelta(minutes=15)
@@ -178,6 +179,11 @@ class DeviceAPI:
         self.device_control('0105', body)
 
     def mode_reservation(self):
+        response = self.device_mode_info('0107')
+        body = '01{}'.format(response['value'])
+        self.device_control('0107', body)
+
+    def mode_reservation_repeat(self):
         response = self.device_mode_info('0108')
         body = '01000000{}{}'.format(response['value'], response['option1'])
         self.device_control('0108', body)
@@ -306,7 +312,7 @@ class Kiturami(ClimateDevice):
         Requires SUPPORT_PRESET_MODE.
         """
         return [STATE_HEAT, STATE_BATH, STATE_RESERVATION,
-                STATE_AWAY]
+                STATE_RESERVATION_REPEAT, STATE_AWAY]
     @property
     def preset_mode(self):
         """Return the current preset mode, e.g., home, away, temp.
@@ -317,8 +323,10 @@ class Kiturami(ClimateDevice):
             return STATE_HEAT
         elif operation_mode == '0105':
             return STATE_BATH
-        elif operation_mode == '0108':
+        elif operation_mode == '0107':
             return STATE_RESERVATION
+        elif operation_mode == '0108':
+            return STATE_RESERVATION_REPEAT
         elif operation_mode == '0106':
             return STATE_AWAY
         else:
@@ -335,6 +343,8 @@ class Kiturami(ClimateDevice):
             self.device.mode_bath()
         elif preset_mode == STATE_RESERVATION:
             self.device.mode_reservation()
+        elif preset_mode == STATE_RESERVATION_REPEAT:
+            self.device.mode_reservation_repeat()
         elif preset_mode == STATE_AWAY:
             self.device.mode_away()
         else:
