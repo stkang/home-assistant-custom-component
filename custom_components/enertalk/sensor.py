@@ -333,7 +333,7 @@ class EnerBillingApi:
 
         self.result = self.client.get(
             'sites/{}/usages/billing{}'.format(self.site_id, param))
-        self.result['charge'] = self.result['bill']['usage']['charge']
+        self.result['charge'] = self.result['bill']['charge']
 
 
 class EnerTalkRealTimeSensor(EnerTalkSensor):
