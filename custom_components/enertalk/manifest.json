@@ -1,8 +1,9 @@
 {
     "domain": "enertalk",
-    "name": "enertalk",
-    "documentation": "https://www.home-assistant.io/components/sensor.enertalk",
-    "requirements": [],
-    "dependencies": [],
-    "codeowners": []
+    "name": "EnerTalk",
+    "documentation": "https://www.home-assistant.io/integrations/enertalk",
+    "codeowners": [
+        "@stkang90"
+    ],
+    "config_flow": true
 }
