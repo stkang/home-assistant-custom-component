@@ -128,9 +128,9 @@ class AirKoreaSensor(Entity):
         self.result = ''
 
     @property
-    def unique_id(self):
-        """Return a unique ID."""
-        return f'{self._name}_{self.var_id}'
+    def entity_id(self):
+        """Return the entity ID."""
+        return 'sensor.{}_{}'.format(self._name, self.var_id)
 
     @property
     def name(self):
