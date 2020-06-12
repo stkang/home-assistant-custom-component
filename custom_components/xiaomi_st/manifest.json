@@ -1,0 +1,8 @@
+{
+    "domain": "xiaomi_st",
+    "name": "xiaomi_st",
+    "documentation": "https://www.home-assistant.io/components/xiaomi_st",
+    "codeowners": [
+        "@stkang90"
+    ]
+}
