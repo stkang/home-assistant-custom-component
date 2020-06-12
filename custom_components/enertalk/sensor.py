@@ -129,7 +129,7 @@ class EnerBillingApi:
         self.site_id = device['id']
         self.timezone = device['timezone']
         self.type = billing_type
-        self.result = {}
+        self.result = None
         self.update = Throttle(interval)(self.update)
 
     def update(self):
@@ -160,7 +160,7 @@ class EnerTalkRealTimeSensor(EnerTalkSensor):
         super().__init__(device, variable, variable_info)
         self.site_id = self._device['id']
         self.api = api
-        self.result = {}
+        self.result = None
         self.update = Throttle(interval)(self.update)
 
     @property

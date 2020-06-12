@@ -2,7 +2,7 @@
     "domain": "airkorea",
     "name": "airkorea",
     "documentation": "https://www.home-assistant.io/components/sensor.airkorea",
-    "requirements": [],
-    "dependencies": [],
-    "codeowners": []
+    "codeowners": [
+        "@stkang90"
+    ]
 }

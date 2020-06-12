@@ -128,9 +128,9 @@ class AirKoreaSensor(Entity):
         self.result = ''
 
     @property
-    def entity_id(self):
-        """Return the entity ID."""
-        return 'sensor.{}_{}'.format(self._name, self.var_id)
+    def unique_id(self):
+        """Return a unique ID."""
+        return f'{self._name}_{self.var_id}'
 
     @property
     def name(self):
@@ -150,6 +150,16 @@ class AirKoreaSensor(Entity):
         return self.var_units
 
     @property
+    def device_info(self):
+        """Return information about the device."""
+        return {
+            "identifiers": {('air_korea', 'quality')},
+            'name': 'Air Korea',
+            'manufacturer': 'data.go.kr',
+            'model': 'air_korea_quality'
+        }
+
+    @property
     def state(self):
         """Return the state of the sensor."""
         return self.var_state
@@ -157,9 +167,9 @@ class AirKoreaSensor(Entity):
     @Throttle(MIN_TIME_BETWEEN_SENSOR_UPDATES)
     def update(self):
         """Get the latest state of the sensor."""
-        if self.api is None:
-            return
         self.api.update()
+        if self.api.result is None:
+            return
         name = '{}{}{}'.format(self.var_name.lower(), self.var_type,
                                self.var_period)
         state = self.api.result[name]

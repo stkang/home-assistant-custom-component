@@ -6,18 +6,18 @@ https://home-assistant.io/components/kiturami/
 """
 import hashlib
 import logging
-import requests
-import voluptuous as vol
-
 from datetime import timedelta
+
 import homeassistant.helpers.config_validation as cv
+import voluptuous as vol
 from homeassistant.components.climate import (
-    ClimateDevice, PLATFORM_SCHEMA)
+    ClimateEntity, PLATFORM_SCHEMA)
 from homeassistant.components.climate.const import (
     HVAC_MODE_HEAT, HVAC_MODE_OFF, SUPPORT_TARGET_TEMPERATURE,
     SUPPORT_PRESET_MODE)
 from homeassistant.const import (
     CONF_NAME, CONF_USERNAME, CONF_PASSWORD, TEMP_CELSIUS, ATTR_TEMPERATURE)
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.exceptions import PlatformNotReady
 from homeassistant.util import Throttle
 
@@ -44,75 +44,76 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
 })
 
 
-def setup_platform(hass, config, add_entities, discovery_info=None):
+async def async_setup_platform(hass, config, async_add_entities,
+                               discovery_info=None):
     """Set up a kiturami."""
 
     name = config.get(CONF_NAME)
     username = config.get(CONF_USERNAME)
     password = config.get(CONF_PASSWORD)
 
-    krb_api = KrbAPI(username, password)
-    if not krb_api.login():
+    session = async_get_clientsession(hass)
+    krb_api = KrbAPI(session, username, password)
+
+    if not await krb_api.login():
         _LOGGER.error("Failed to login Kiturami")
         raise PlatformNotReady
 
-    node_id = krb_api.node_id()
+    node_id = await krb_api.node_id()
     if not node_id:
         _LOGGER.error("Failed to no Kiturami")
         raise PlatformNotReady
 
-    device = [Kiturami(name, DeviceAPI(krb_api, node_id))]
-
-    add_entities(device, True)
+    async_add_entities([Kiturami(name, DeviceAPI(krb_api, node_id))], True)
 
 
 class KrbAPI:
     """Kiturami Member API."""
 
-    def __init__(self, username, password):
+    def __init__(self, session, username, password):
         """Initialize the Kiturami Member API.."""
+        self.session = session
         self.username = username
         self.password = password
         self.auth_key = ''
 
-    def request(self, url, args):
+    async def request(self, url, args):
         headers = {'Content-Type': 'application/json; charset=UTF-8',
                    'AUTH-KEY': self.auth_key}
         try:
-            response = requests.post(url, headers=headers, json=args,
-                                     timeout=10)
-            response.raise_for_status()
-            _LOGGER.debug('JSON Response: %s',
-                          response.content.decode('utf8'))
+            response = await self.session.post(url, headers=headers, json=args, timeout=10)
+            _LOGGER.debug('JSON Response: %s', await response.text())
             return response
         except Exception as ex:
             _LOGGER.error('Failed to Kiturami API status Error: %s', ex)
             raise
 
-    def post(self, url, args):
-        response = self.request(url, args)
-        if response.status_code != 200 or not response.content.decode('utf8'):
-            if self.login():
-                response = self.request(url)
+    async def post(self, url, args):
+        response = await self.request(url, args)
+        if (response.status != 200 or not await response.text()) \
+                and await self.login():
+            response = await self.request(url, args)
 
-        return response.json()
+        return await response.json(content_type='text/json')
 
-    def login(self):
+    async def login(self):
         url = '{}/member/login'.format(KITURAMI_API_URL)
         password = hashlib.sha256(self.password.encode('utf-8'))
         args = {
             'memberId': self.username,
             'password': password.hexdigest()
         }
-        self.auth_key = self.post(url, args)['authKey']
+        response = await self.request(url, args)
+        result = await response.json(content_type='text/json')
+        self.auth_key = result['authKey']
         return self.auth_key
 
-    def node_id(self):
+    async def node_id(self):
         url = '{}/member/getMemberNormalDeviceList'.format(KITURAMI_API_URL)
         args = {
             'parentId': '1'
         }
-        response = self.post(url, args)
+        response = await self.post(url, args)
         return response['memberDeviceList'][0]['nodeId']
 
 
@@ -126,23 +127,23 @@ class DeviceAPI:
         self.alive = {}
         self.is_alive = Throttle(MIN_TIME_BETWEEN_UPDATES)(self.is_alive)
 
-    def is_alive(self):
+    async def is_alive(self):
         url = '{}/device/isAliveNormal'.format(KITURAMI_API_URL)
         args = {
             'nodeId': self.node_id,
             'parentId': '1'
         }
-        self.alive = self.krb.post(url, args)
+        self.alive = await self.krb.post(url, args)
 
-    def device_info(self):
+    async def device_info(self):
         url = '{}/device/getDeviceInfo'.format(KITURAMI_API_URL)
         args = {
             'nodeId': self.node_id,
             'parentId': '1'
         }
-        return self.krb.post(url, args)
+        return await self.krb.post(url, args)
 
-    def device_mode_info(self, action_id = '0102'):
+    async def device_mode_info(self, action_id='0102'):
         url = '{}/device/getDeviceModeInfo'.format(KITURAMI_API_URL)
         args = {
             'nodeId': self.node_id,
@@ -150,49 +151,51 @@ class DeviceAPI:
             'parentId': '1',
             'slaveId': '01'
         }
-        return self.krb.post(url, args)
+        return await self.krb.post(url, args)
 
-    def device_control(self, message_id, message_body):
+    async def device_control(self, message_id, message_body):
         url = '{}/device/deviceControl'.format(KITURAMI_API_URL)
         args = {
             'nodeIds': [self.node_id],
             'messageId': message_id,
             'messageBody': message_body
         }
-        return self.krb.post(url, args)
+        return await self.krb.post(url, args)
 
-    def turn_on(self):
-        self.device_control('0101', '010000000001')
+    async def turn_on(self):
+        await self.device_control('0101', '010000000001')
 
-    def turn_off(self):
-        self.device_control('0101', '010000000002')
+    async def turn_off(self):
+        await self.device_control('0101', '010000000002')
 
-    def mode_heat(self, target_temp = ''):
+    async def mode_heat(self, target_temp=''):
         if not target_temp:
-            target_temp = self.device_mode_info('0102')['value']
+            response = await self.device_mode_info('0102')
+            target_temp = response['value']
         body = '01000000{}00'.format(target_temp)
-        self.device_control('0102', body)
+        await self.device_control('0102', body)
 
-    def mode_bath(self):
-        value = self.device_mode_info('0105')['value']
+    async def mode_bath(self):
+        response = await self.device_mode_info('0105')
+        value = response['value']
         body = '00000000{}00'.format(value)
-        self.device_control('0105', body)
+        await self.device_control('0105', body)
 
-    def mode_reservation(self):
-        response = self.device_mode_info('0107')
+    async def mode_reservation(self):
+        response = await self.device_mode_info('0107')
         body = '01{}'.format(response['value'])
-        self.device_control('0107', body)
+        await self.device_control('0107', body)
 
-    def mode_reservation_repeat(self):
-        response = self.device_mode_info('0108')
+    async def mode_reservation_repeat(self):
+        response = await self.device_mode_info('0108')
         body = '01000000{}{}'.format(response['value'], response['option1'])
-        self.device_control('0108', body)
+        await self.device_control('0108', body)
 
-    def mode_away(self):
-        self.device_control('0106', '010200000000')
+    async def mode_away(self):
+        await self.device_control('0106', '010200000000')
 
 
-class Kiturami(ClimateDevice):
+class Kiturami(ClimateEntity):
 
     def __init__(self, name, device):
         """Initialize the thermostat."""
@@ -214,7 +217,10 @@ class Kiturami(ClimateDevice):
     def device_info(self):
         """Return information about the device."""
         return {
-            'node_id': self.device.node_id,
+            "identifiers": {('kiturami', self.device.node_id)},
+            'name': 'Kiturami IOT',
+            'manufacturer': 'kiturami',
+            'model': 'NCTR',
             'device_alias': self.result['deviceAlias']
         }
 
@@ -242,9 +248,8 @@ class Kiturami(ClimateDevice):
         alive = self.device.alive
         if not alive:
             return False
-        return alive['deviceStat'] == True \
-               and alive['deviceStatus'] == True \
-               and alive['isAlive'] == True
+        return alive['deviceStat'] and alive['deviceStatus'] and alive[
+            'isAlive']
 
     @property
     def temperature_unit(self):
@@ -300,11 +305,11 @@ class Kiturami(ClimateDevice):
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
         if self.is_on is False:
-            self.device.turn_on()
+            await self.device.turn_on()
         temperature = kwargs.get(ATTR_TEMPERATURE)
         if temperature is None:
             return
-        self.device.mode_heat('{:X}'.format(int(temperature)))
+        await self.device.mode_heat('{:X}'.format(int(temperature)))
 
     @property
     def preset_modes(self):
@@ -313,6 +318,7 @@ class Kiturami(ClimateDevice):
         """
         return [STATE_HEAT, STATE_BATH, STATE_RESERVATION,
                 STATE_RESERVATION_REPEAT, STATE_AWAY]
+
     @property
     def preset_mode(self):
         """Return the current preset mode, e.g., home, away, temp.
@@ -336,28 +342,28 @@ class Kiturami(ClimateDevice):
         """Set new preset mode."""
 
         if self.is_on is False:
-            self.device.turn_on()
+            await self.device.turn_on()
         if preset_mode == STATE_HEAT:
-            self.device.mode_heat()
+            await self.device.mode_heat()
         elif preset_mode == STATE_BATH:
-            self.device.mode_bath()
+            await self.device.mode_bath()
         elif preset_mode == STATE_RESERVATION:
-            self.device.mode_reservation()
+            await self.device.mode_reservation()
         elif preset_mode == STATE_RESERVATION_REPEAT:
-            self.device.mode_reservation_repeat()
+            await self.device.mode_reservation_repeat()
         elif preset_mode == STATE_AWAY:
-            self.device.mode_away()
+            await self.device.mode_away()
         else:
             _LOGGER.error("Unrecognized operation mode: %s", preset_mode)
 
     async def async_set_hvac_mode(self, hvac_mode):
         """Set new target hvac mode."""
         if hvac_mode == HVAC_MODE_HEAT:
-            self.device.turn_on()
+            await self.device.turn_on()
         elif hvac_mode == HVAC_MODE_OFF:
-            self.device.turn_off()
+            await self.device.turn_off()
 
     async def async_update(self):
         """Retrieve latest state."""
-        self.device.is_alive()
-        self.result = self.device.device_mode_info()
+        await self.device.is_alive()
+        self.result = await self.device.device_mode_info()

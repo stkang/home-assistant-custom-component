@@ -2,7 +2,7 @@
     "domain": "kiturami",
     "name": "kiturami",
     "documentation": "https://www.home-assistant.io/components/kiturami",
-    "requirements": [],
-    "dependencies": [],
-    "codeowners": []
+    "codeowners": [
+        "@stkang90"
+    ]
 }
