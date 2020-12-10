@@ -23,7 +23,7 @@ from homeassistant.util import Throttle
 
 _LOGGER = logging.getLogger(__name__)
 
-KITURAMI_API_URL = 'https://igs.krb.co.kr/api'
+KITURAMI_API_URL = 'https://igis.krb.co.kr/api'
 DEFAULT_NAME = 'Kiturami'
 
 MAX_TEMP = 45
