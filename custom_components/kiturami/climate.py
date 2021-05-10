@@ -1,6 +1,5 @@
 """
 Support for kiturami Component.
-
 For more details about this platform, please refer to the documentation at
 https://home-assistant.io/components/kiturami/
 """
@@ -59,12 +58,18 @@ async def async_setup_platform(hass, config, async_add_entities,
         _LOGGER.error("Failed to login Kiturami")
         raise PlatformNotReady
 
-    node_id = await krb_api.node_id()
-    if not node_id:
-        _LOGGER.error("Failed to no Kiturami")
+    if not await krb_api.get_node_id():
+        _LOGGER.error("Failed to node")
         raise PlatformNotReady
 
-    async_add_entities([Kiturami(name, DeviceAPI(krb_api, node_id))], True)
+    slave_list = await krb_api.device_info()
+
+    if not slave_list:
+        _LOGGER.error("Failed to get slave divices")
+        raise PlatformNotReady
+
+    for slave in slave_list:
+        async_add_entities([Kiturami(name+slave['alias'], DeviceAPI(krb_api, slave['slaveId']))], True)
 
 
 class KrbAPI:
@@ -76,6 +81,7 @@ class KrbAPI:
         self.username = username
         self.password = password
         self.auth_key = ''
+        self.node_id = ''
 
     async def request(self, url, args):
         headers = {'Content-Type': 'application/json; charset=UTF-8',
@@ -108,32 +114,14 @@ class KrbAPI:
         self.auth_key = result['authKey']
         return self.auth_key
 
-    async def node_id(self):
-        url = '{}/member/getMemberNormalDeviceList'.format(KITURAMI_API_URL)
+    async def get_node_id(self):
+        url = '{}/member/getMemberDeviceList'.format(KITURAMI_API_URL)
         args = {
             'parentId': '1'
         }
         response = await self.post(url, args)
-        return response['memberDeviceList'][0]['nodeId']
-
-
-class DeviceAPI:
-    """Kiturami Device API."""
-
-    def __init__(self, krb, node_id):
-        """Initialize the Kiturami Member API.."""
-        self.krb = krb
-        self.node_id = node_id
-        self.alive = {}
-        self.is_alive = Throttle(MIN_TIME_BETWEEN_UPDATES)(self.is_alive)
-
-    async def is_alive(self):
-        url = '{}/device/isAliveNormal'.format(KITURAMI_API_URL)
-        args = {
-            'nodeId': self.node_id,
-            'parentId': '1'
-        }
-        self.alive = await self.krb.post(url, args)
+        self.node_id = response['memberDeviceList'][0]['nodeId']
+        return self.node_id
 
     async def device_info(self):
         url = '{}/device/getDeviceInfo'.format(KITURAMI_API_URL)
@@ -141,58 +129,77 @@ class DeviceAPI:
             'nodeId': self.node_id,
             'parentId': '1'
         }
-        return await self.krb.post(url, args)
+        response = await self.post(url, args)
+        return response['deviceSlaveInfo']
+
+class DeviceAPI:
+    """Kiturami Device API."""
+
+    def __init__(self, krb, slave_id):
+        """Initialize the Kiturami Member API.."""
+        self.krb = krb
+        self.slave_id = slave_id
+        self.alive = {}
+        self.is_alive = Throttle(MIN_TIME_BETWEEN_UPDATES)(self.is_alive)
+
+    async def is_alive(self):
+        url = '{}/device/isAliveNormal'.format(KITURAMI_API_URL)
+        args = {
+            'nodeId': self.krb.node_id,
+            'parentId': '1'
+        }
+        self.alive = await self.krb.post(url, args)
 
     async def device_mode_info(self, action_id='0102'):
         url = '{}/device/getDeviceModeInfo'.format(KITURAMI_API_URL)
         args = {
-            'nodeId': self.node_id,
+            'nodeId': self.krb.node_id,
             'actionId': action_id,
             'parentId': '1',
-            'slaveId': '01'
+            'slaveId': self.slave_id
         }
         return await self.krb.post(url, args)
 
     async def device_control(self, message_id, message_body):
         url = '{}/device/deviceControl'.format(KITURAMI_API_URL)
         args = {
-            'nodeIds': [self.node_id],
+            'nodeIds': [self.krb.node_id],
             'messageId': message_id,
             'messageBody': message_body
         }
         return await self.krb.post(url, args)
 
     async def turn_on(self):
-        await self.device_control('0101', '010000000001')
+        await self.device_control('0101', '{}0000000001'.format(self.slave_id))
 
     async def turn_off(self):
-        await self.device_control('0101', '010000000002')
+        await self.device_control('0101', '{}0000000002'.format(self.slave_id))
 
     async def mode_heat(self, target_temp=''):
         if not target_temp:
             response = await self.device_mode_info('0102')
             target_temp = response['value']
-        body = '01000000{}00'.format(target_temp)
+        body = '{}000000{}00'.format(self.slave_id, target_temp)
         await self.device_control('0102', body)
 
     async def mode_bath(self):
         response = await self.device_mode_info('0105')
         value = response['value']
-        body = '00000000{}00'.format(value)
+        body = '00000000{}00'.format(self.slave_id, value)
         await self.device_control('0105', body)
 
     async def mode_reservation(self):
         response = await self.device_mode_info('0107')
-        body = '01{}'.format(response['value'])
+        body = '{}{}'.format(self.slave_id, response['value'])
         await self.device_control('0107', body)
 
     async def mode_reservation_repeat(self):
         response = await self.device_mode_info('0108')
-        body = '01000000{}{}'.format(response['value'], response['option1'])
+        body = '{}000000{}{}'.format(self.slave_id, response['value'], response['option1'])
         await self.device_control('0108', body)
 
     async def mode_away(self):
-        await self.device_control('0106', '010200000000')
+        await self.device_control('0106', '{}0200000000'.format(self.slave_id))
 
 
 class Kiturami(ClimateEntity):
@@ -206,7 +213,7 @@ class Kiturami(ClimateEntity):
     @property
     def unique_id(self):
         """Return a unique ID."""
-        return self.device.node_id
+        return self.device.krb.node_id + self.device.slave_id
 
     @property
     def name(self):
@@ -217,7 +224,7 @@ class Kiturami(ClimateEntity):
     def device_info(self):
         """Return information about the device."""
         return {
-            "identifiers": {('kiturami', self.device.node_id)},
+            "identifiers": {('kiturami', self.device.krb.node_id + self.device.slave_id)},
             'name': 'Kiturami IOT',
             'manufacturer': 'kiturami',
             'model': 'NCTR',
@@ -228,7 +235,7 @@ class Kiturami(ClimateEntity):
     def device_state_attributes(self):
         """Return the state attributes of the device."""
         return {
-            'node_id': self.device.node_id,
+            'node_id': self.device.krb.node_id + self.device.slave_id,
             'device_mode': self.result['deviceMode']
         }
 
