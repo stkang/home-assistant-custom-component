@@ -19,7 +19,7 @@ CONF_MINUTELY_INTERVAL = 'minutely_interval'
 CONF_SUMMARY_MON_COND = 'summary_monitored_conditions'
 CONF_MINUTELY_MON_COND = 'minutely_monitored_conditions'
 
-AIR_KOREA_API_URL = 'http://openapi.airkorea.or.kr/openapi/services/rest'
+AIR_KOREA_API_URL = 'http://apis.data.go.kr/B552584'
 DEFAULT_NAME = 'Air Korea'
 
 MIN_TIME_BETWEEN_API_UPDATES = timedelta(seconds=30)
@@ -99,13 +99,14 @@ class AirKoreaAPI:
         try:
             url = '{}/ArpltnInforInqireSvc/getMsrstnAcctoRltmMesureDnsty?' \
                   '&pageNo=1&numOfRows=1&ver=1.3&dataTerm=month' \
-                  '&ServiceKey={}&stationName={}&_returnType=json'
+                  '&ServiceKey={}&stationName={}&returnType=json'
             url = url.format(AIR_KOREA_API_URL, self.service_key,
                              self.station_name)
             response = requests.get(url, timeout=10)
             response.raise_for_status()
-            _LOGGER.debug('JSON Response: %s', response.content.decode('utf8'))
-            self.result = response.json()['list'][0]
+            res_json = response.json()
+            _LOGGER.debug('JSON Response: type %s, %s', type(res_json), res_json)
+            self.result = res_json['response']['body']['items'][0]
         except Exception as ex:
             _LOGGER.error('Failed to update AirKorea API status Error: %s', ex)
             raise
