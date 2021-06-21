@@ -2,7 +2,11 @@
     "domain": "xiaomi_st",
     "name": "xiaomi_st",
     "documentation": "https://www.home-assistant.io/components/xiaomi_st",
+    "dependencies": [],
     "codeowners": [
         "@stkang90"
-    ]
+    ],
+    "requirements": [],
+    "iot_class": "local_polling",
+    "version": "1.0.0"
 }

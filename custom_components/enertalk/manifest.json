@@ -2,8 +2,12 @@
     "domain": "enertalk",
     "name": "EnerTalk",
     "documentation": "https://www.home-assistant.io/integrations/enertalk",
+    "dependencies": [],
     "codeowners": [
         "@stkang90"
     ],
-    "config_flow": true
+    "requirements": [],
+    "config_flow": true,
+    "iot_class": "cloud_polling",
+    "version": "1.0.0"
 }
