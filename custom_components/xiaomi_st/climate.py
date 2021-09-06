@@ -159,7 +159,8 @@ async def async_setup_platform(hass, config, async_add_entities,
 
     if model.startswith('nwt.derh.'):
         from miio import AirDehumidifier
-        air_dehumidifier = AirDehumidifier(host, token, model=model)
+        air_dehumidifier = AirDehumidifier(host, token, model=model)        
+        air_dehumidifier.device_info = None
         device = XiaomiAirDehumidifier(name, air_dehumidifier, model, unique_id)
     else:
         _LOGGER.error(
