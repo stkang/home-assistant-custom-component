@@ -20,13 +20,16 @@ public class Main {
     private static String deviceIp = "192.168.43.1";
     private static int devicePort = 5000;
 
+    private static String deviceModelName = "B540-WF";
+    private static String deviceModel = "B5X";
+
     private static Scanner sc;
 
     public static void main(String[] args) {
         System.out.println("###############################################");
         System.out.println("######### [Dawon Dns 스마트 플러그 설정 툴] #########");
         System.out.println("###############################################");
-        System.out.println("## 테스트 성공 모델: Smart Plug(B530-WF/B540-WF) ##");
+        System.out.println("## 테스트 성공 모델: Smart Plug(B530-WF/B540-WF), Smart Solar Power Generation Plug(B400-W) ##");
         System.out.println();
 
         sc = new Scanner(System.in);
@@ -54,8 +57,8 @@ public class Main {
             System.out.println("연결 성공");
             DataOutputStream bufferedWriter = new DataOutputStream(socket.getOutputStream());
 
-            String dataFormat = "{\"server_addr\":\"%s\",\"server_port\":\"%d\",\"ssl_support\":\"no\",\"ssid\":\"%s\",\"pass\":\"%s\",\"mqtt_key\":\"%s\",\"company\":\"DAWONDNS\",\"model\":\"B5X\",\"topic\":\"dwd\"}";
-            String sendData = String.format(dataFormat, mqttIp, mqttPort, wifiName, wifiPasswd, mqttPasswd);
+            String dataFormat = "{\"server_addr\":\"%s\",\"server_port\":\"%d\",\"ssl_support\":\"no\",\"ssid\":\"%s\",\"pass\":\"%s\",\"mqtt_key\":\"%s\",\"company\":\"DAWONDNS\",\"model\":\"%s\",\"topic\":\"dwd\"}";
+            String sendData = String.format(dataFormat, mqttIp, mqttPort, wifiName, wifiPasswd, mqttPasswd, deviceModel);
             System.out.println("SendData: " + sendData);
 
             (new PrintWriter(bufferedWriter, true)).println(sendData);
@@ -114,8 +117,24 @@ public class Main {
         System.out.println("MQTT 서버 비밀번호를 입력하세요. (1234 입력 권장)");
         mqttPasswd = sc.next();
 
+        System.out.println("##############################");
+        System.out.println();
 
         System.out.println("#### [디바이스(스마트 플러그) 설정] ###");
+        System.out.println("디바이스 모델명를 입력하세요. (기본값: B540-WF) 지원 모델: B530-WF/B540-WF/B400-W");
+        deviceModelName = sc.next();
+        if (deviceModelName == null || deviceModelName.length() == 0) {
+            deviceModelName = "B540-WF";
+        }
+        if (deviceModelName.equalsIgnoreCase("B540-WF") || deviceModelName.equalsIgnoreCase("B530-WF")) {
+            deviceModel = "B5X";
+        } else if (deviceModelName.equalsIgnoreCase("B400-W")) {
+            deviceModel = "B400_SW";
+        } else {
+            System.out.println("[오류] - 지원하지 않는 디바이스 모델 입니다.");
+            return false;
+        }
+
         System.out.println("디바이스 주소(IP)를 입력하세요. (IPv4) (기본값: " + deviceIp + ")");
         deviceIp = sc.next();
         if (deviceIp == null || deviceIp.length() == 0) {
@@ -145,6 +164,7 @@ public class Main {
         System.out.println(String.format("MQTT IP: %s", mqttIp));
         System.out.println(String.format("MQTT 포트: %d", mqttPort));
         System.out.println(String.format("MQTT 비밀번호: %s", mqttPasswd));
+        System.out.println(String.format("디바이스 모델명: %s (%s)", deviceModelName, deviceModel));
         System.out.println(String.format("디바이스 IP: %s", deviceIp));
         System.out.println(String.format("디바이스 포트: %d", devicePort));
         System.out.println();
