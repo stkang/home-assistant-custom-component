@@ -197,6 +197,8 @@ class DeviceAPI:
 
 class Kiturami(ClimateEntity):
 
+    _enable_turn_on_off_backwards_compatibility = False
+
     def __init__(self, name, device):
         """Initialize the thermostat."""
         self._name = name
