@@ -1,0 +1,21 @@
+{
+  "title": "에어 코리아",
+  "config": {
+    "abort": {
+      "already_configured": "장치가 이미 구성되었습니다."
+    },
+    "error": {
+      "invalid_auth": "인증 실패",
+      "unknown": "Unexpected error"
+    },
+    "step": {
+      "user": {
+        "data": {
+          "api_key": "API 키",
+          "station_name": "측정소 이름"
+        },
+        "description": "API_KEY(https://www.data.go.kr/tcs/dss/selectApiDataDetailView.do?publicDataPk=15073861), 측정소(https://www.airkorea.or.kr/web/realSearch)"
+      }
+    }
+  }
+}
