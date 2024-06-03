@@ -1,0 +1,54 @@
+{
+  "title": "동행복권",
+  "config": {
+    "abort": {
+      "already_configured": "장치가 이미 구성되었습니다."
+    },
+    "error": {
+      "invalid_login": "로그인에 실패했습니다. 아이디 또는 비밀번호를 확인해주세요.",
+      "unknown": "Unexpected error"
+    },
+    "step": {
+      "user": {
+        "description": "https://dhlottery.co.kr/common.do?method=main",
+        "data": {
+          "username": "아이디",
+          "password": "비밀번호",
+          "lotto_645": "로또 6/45"
+        }
+      }
+    }
+  },
+  "services": {
+    "refresh_lottery": {
+      "name": "복권 정보 갱신",
+      "description": "예치금, 구매한 복권 정보를 갱신합니다."
+    },
+    "buy_lotto_645": {
+      "name": "로또 6/45 구매",
+      "description": "로또 6/45를 구매 합니다. 자동, 수동, 반자동",
+      "fields": {
+        "game_1": {
+          "name": "게임 1 (game_1)",
+          "description": "예) 자동"
+        },
+        "game_2": {
+          "name": "게임 2 (game_2)",
+          "description": "예) 수동, 10, 43, 22, 33, 11, 44"
+        },
+        "game_3": {
+          "name": "게임 3 (game_3)",
+          "description": "예) 반자동, 33, 22, 12"
+        },
+        "game_4": {
+          "name": "게임 4 (game_4)",
+          "description": "예) 자동"
+        },
+        "game_5": {
+          "name": "게임 5 (game_5)",
+          "description": "예) 자동"
+        }
+      }
+    }
+  }
+}
