@@ -1,371 +1,201 @@
-"""
-Support for kiturami Component.
-
-For more details about this platform, please refer to the documentation at
-https://home-assistant.io/components/kiturami/
-"""
-import hashlib
+import asyncio
+import datetime
 import logging
 from datetime import timedelta
+from enum import StrEnum
+from typing import Optional
 
-import homeassistant.helpers.config_validation as cv
-import voluptuous as vol
 from homeassistant.components.climate import (
-    ClimateEntity, PLATFORM_SCHEMA)
+    ClimateEntity)
 from homeassistant.components.climate.const import (
-    HVAC_MODE_HEAT, HVAC_MODE_OFF, SUPPORT_TARGET_TEMPERATURE,
-    SUPPORT_PRESET_MODE)
-from homeassistant.const import (
-    CONF_NAME, CONF_USERNAME, CONF_PASSWORD, TEMP_CELSIUS, ATTR_TEMPERATURE)
-from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.exceptions import PlatformNotReady
-from homeassistant.util import Throttle
+    HVACMode, ClimateEntityFeature)
+from homeassistant.const import UnitOfTemperature, ATTR_TEMPERATURE, CONF_SCAN_INTERVAL
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from . import KituramiConfigEntry, KrbAPI, DOMAIN
+from .const import TITLE, MODEL, MIN_TEMP, MAX_TEMP
 
 _LOGGER = logging.getLogger(__name__)
 
-KITURAMI_API_URL = 'https://igis.krb.co.kr/api'
-DEFAULT_NAME = 'Kiturami'
 
-MAX_TEMP = 45
-MIN_TEMP = 10
-HVAC_MODE_BATH = '목욕'
-STATE_HEAT = '난방'
-STATE_BATH = '목욕'
-STATE_RESERVATION = '24시간 예약'
-STATE_RESERVATION_REPEAT = '반복 예약'
-STATE_AWAY = '외출'
-
-MIN_TIME_BETWEEN_UPDATES = timedelta(minutes=15)
-
-PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend({
-    vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
-    vol.Required(CONF_USERNAME): cv.string,
-    vol.Required(CONF_PASSWORD): cv.string
-})
+class PresetMode(StrEnum):
+    """Preset modes."""
+    HEAT = "난방"
+    BATH = "목욕"
+    RESERVATION = "24시간 예약"
+    RESERVATION_REPEAT = "반복 예약"
+    AWAY = "외출"
 
 
-async def async_setup_platform(hass, config, async_add_entities,
-                               discovery_info=None):
-    """Set up a kiturami."""
+async def async_setup_entry(
+        hass: HomeAssistant, entry: KituramiConfigEntry, async_add_entities: AddEntitiesCallback
+) -> None:
+    """설정 항목을 사용하여 플랫폼을 설정합니다."""
+    api: KrbAPI = entry.runtime_data
+    scan_interval = entry.data[CONF_SCAN_INTERVAL]
 
-    name = config.get(CONF_NAME)
-    username = config.get(CONF_USERNAME)
-    password = config.get(CONF_PASSWORD)
+    devices = await api.client.async_get_device_list()
 
-    session = async_get_clientsession(hass)
-    krb_api = KrbAPI(session, username, password)
-
-    if not await krb_api.login():
-        _LOGGER.error("Failed to login Kiturami")
-        raise PlatformNotReady
-
-    node_id = await krb_api.node_id()
-    if not node_id:
-        _LOGGER.error("Failed to no Kiturami")
-        raise PlatformNotReady
-
-    async_add_entities([Kiturami(name, DeviceAPI(krb_api, node_id))], True)
+    async_add_entities([KituramiClimate(api, device["parentId"], device["nodeId"], device["deviceAlias"], scan_interval)
+                        for device in devices], True)
 
 
-class KrbAPI:
-    """Kiturami Member API."""
-
-    def __init__(self, session, username, password):
-        """Initialize the Kiturami Member API.."""
-        self.session = session
-        self.username = username
-        self.password = password
-        self.auth_key = ''
-
-    async def request(self, url, args):
-        headers = {'Content-Type': 'application/json; charset=UTF-8',
-                   'AUTH-KEY': self.auth_key}
-        try:
-            response = await self.session.post(url, headers=headers, json=args, timeout=10)
-            _LOGGER.debug('JSON Response: %s', await response.text())
-            return response
-        except Exception as ex:
-            _LOGGER.error('Failed to Kiturami API status Error: %s', ex)
-            raise
-
-    async def post(self, url, args):
-        response = await self.request(url, args)
-        if (response.status != 200 or not await response.text()) \
-                and await self.login():
-            response = await self.request(url, args)
-
-        return await response.json(content_type='text/json')
-
-    async def login(self):
-        url = '{}/member/login'.format(KITURAMI_API_URL)
-        password = hashlib.sha256(self.password.encode('utf-8'))
-        args = {
-            'memberId': self.username,
-            'password': password.hexdigest()
-        }
-        response = await self.request(url, args)
-        result = await response.json(content_type='text/json')
-        self.auth_key = result['authKey']
-        return self.auth_key
-
-    async def node_id(self):
-        url = '{}/member/getMemberNormalDeviceList'.format(KITURAMI_API_URL)
-        args = {
-            'parentId': '1'
-        }
-        response = await self.post(url, args)
-        return response['memberDeviceList'][0]['nodeId']
-
-
-class DeviceAPI:
-    """Kiturami Device API."""
-
-    def __init__(self, krb, node_id):
-        """Initialize the Kiturami Member API.."""
-        self.krb = krb
-        self.node_id = node_id
-        self.alive = {}
-        self.is_alive = Throttle(MIN_TIME_BETWEEN_UPDATES)(self.is_alive)
-
-    async def is_alive(self):
-        url = '{}/device/isAliveNormal'.format(KITURAMI_API_URL)
-        args = {
-            'nodeId': self.node_id,
-            'parentId': '1'
-        }
-        self.alive = await self.krb.post(url, args)
-
-    async def device_info(self):
-        url = '{}/device/getDeviceInfo'.format(KITURAMI_API_URL)
-        args = {
-            'nodeId': self.node_id,
-            'parentId': '1'
-        }
-        return await self.krb.post(url, args)
-
-    async def device_mode_info(self, action_id='0102'):
-        url = '{}/device/getDeviceModeInfo'.format(KITURAMI_API_URL)
-        args = {
-            'nodeId': self.node_id,
-            'actionId': action_id,
-            'parentId': '1',
-            'slaveId': '01'
-        }
-        return await self.krb.post(url, args)
-
-    async def device_control(self, message_id, message_body):
-        url = '{}/device/deviceControl'.format(KITURAMI_API_URL)
-        args = {
-            'nodeIds': [self.node_id],
-            'messageId': message_id,
-            'messageBody': message_body
-        }
-        return await self.krb.post(url, args)
-
-    async def turn_on(self):
-        await self.device_control('0101', '010000000001')
-
-    async def turn_off(self):
-        await self.device_control('0101', '010000000002')
-
-    async def mode_heat(self, target_temp=''):
-        if not target_temp:
-            response = await self.device_mode_info('0102')
-            target_temp = response['value']
-        body = '01000000{}00'.format(target_temp)
-        await self.device_control('0102', body)
-
-    async def mode_bath(self):
-        response = await self.device_mode_info('0105')
-        value = response['value']
-        body = '00000000{}00'.format(value)
-        await self.device_control('0105', body)
-
-    async def mode_reservation(self):
-        response = await self.device_mode_info('0107')
-        body = '01{}'.format(response['value'])
-        await self.device_control('0107', body)
-
-    async def mode_reservation_repeat(self):
-        response = await self.device_mode_info('0108')
-        body = '01000000{}{}'.format(response['value'], response['option1'])
-        await self.device_control('0108', body)
-
-    async def mode_away(self):
-        await self.device_control('0106', '010200000000')
-
-
-class Kiturami(ClimateEntity):
-
+class KituramiClimate(ClimateEntity):
+    """ 귀뚜라미 Climate 클래스"""
     _enable_turn_on_off_backwards_compatibility = False
 
-    def __init__(self, name, device):
-        """Initialize the thermostat."""
-        self._name = name
-        self.device = device
-        self.result = {}
+    def __init__(self, api: KrbAPI, parent_id: str, node_id: str, name: str, _min_time_between_updates: int):
+        self._api: KrbAPI = api
+        self._min_time_between_updates: datetime.timedelta = timedelta(minutes=_min_time_between_updates)
+        self._parent_id = parent_id
+        self._node_id = node_id
+        self.entity_id = f"climate.{DOMAIN}_{node_id.replace(':', '_')}"
+        self._attr_unique_id = f"{DOMAIN}-{node_id}"
+        self._attr_name = f'{TITLE} {name}'
+        self._attr_device_info = DeviceInfo(
+            configuration_url='https://krb.co.kr',
+            identifiers={(DOMAIN, node_id)},
+            name=TITLE,
+            manufacturer=TITLE,
+            model=MODEL,
+        )
+        self._attr_hvac_modes = [HVACMode.OFF, HVACMode.HEAT]
+        self._attr_preset_modes = [PresetMode.HEAT, PresetMode.BATH, PresetMode.RESERVATION,
+                                   PresetMode.RESERVATION_REPEAT, PresetMode.AWAY]
+        self._attr_precision = 1
+        self._attr_min_temp = MIN_TEMP
+        self._attr_max_temp = MAX_TEMP
+        self._attr_target_temperature_step = 1
+        self._attr_temperature_unit = UnitOfTemperature.CELSIUS
 
-    @property
-    def unique_id(self):
-        """Return a unique ID."""
-        return self.device.node_id
-
-    @property
-    def name(self):
-        """Return the name of the entity."""
-        return self._name
-
-    @property
-    def device_info(self):
-        """Return information about the device."""
-        return {
-            "identifiers": {('kiturami', self.device.node_id)},
-            'name': 'Kiturami IOT',
-            'manufacturer': 'kiturami',
-            'model': 'NCTR',
-            'device_alias': self.result['deviceAlias']
-        }
+        self._req_mode: Optional[str] = None
+        self._alive = {}
+        self._result = {}
+        self._last_updated: Optional[datetime.datetime] = None
 
     @property
     def device_state_attributes(self):
-        """Return the state attributes of the device."""
+        """장치의 상태 속성을 반환합니다."""
         return {
-            'node_id': self.device.node_id,
-            'device_mode': self.result['deviceMode']
+            'parent_id': self._parent_id,
+            'node_id': self._node_id,
+            "user_name": self._api.client.username,
+            'device_mode': self._result['deviceMode'],
+            'last_updated': self._last_updated,
         }
 
     @property
     def supported_features(self):
-        """Return the list of supported features."""
+        """지원되는 기능 목록을 반환합니다."""
         features = 0
         if self.is_on:
-            features |= SUPPORT_PRESET_MODE
-        if self.preset_mode == STATE_HEAT:
-            features |= SUPPORT_TARGET_TEMPERATURE
+            features |= ClimateEntityFeature.PRESET_MODE
+        if self.preset_mode == PresetMode.HEAT:
+            features |= ClimateEntityFeature.TARGET_TEMPERATURE
         return features
 
     @property
     def available(self):
-        """Return True if entity is available."""
-        alive = self.device.alive
-        if not alive:
-            return False
-        return alive['deviceStat'] and alive['deviceStatus'] and alive[
-            'isAlive']
-
-    @property
-    def temperature_unit(self):
-        """Return the unit of measurement which this thermostat uses."""
-        return TEMP_CELSIUS
-
-    @property
-    def target_temperature_step(self):
-        """Return the supported step of target temperature."""
-        return 1
-
-    @property
-    def min_temp(self):
-        """Return the minimum temperature."""
-        return MIN_TEMP
-
-    @property
-    def max_temp(self):
-        """Return the maximum temperature."""
-        return MAX_TEMP
+        """장치가 사용 가능한지 확인합니다."""
+        return self._alive['deviceStat'] and self._alive['deviceStatus'] and self._alive['isAlive']
 
     @property
     def is_on(self):
-        """Return true if heater is on."""
-        return self.result['deviceMode'] != '0101'
+        """히터가 켜져 있으면 true를 반환합니다."""
+        return self._result['deviceMode'] != '0101'
 
     @property
     def current_temperature(self):
-        """Return the current temperature."""
-        return int(self.result['currentTemp'], 16)
+        """현재 온도를 반환합니다."""
+        return int(self._result['currentTemp'], 16)
 
     @property
     def target_temperature(self):
-        """Return the temperature we try to reach."""
-        return int(self.result['value'], 16)
+        """히터가 도달하려고 하는 온도를 반환합니다."""
+        return int(self._result['value'], 16)
 
     @property
     def hvac_mode(self):
-        """Return hvac operation ie. heat, cool mode.
-        Need to be one of HVAC_MODE_*.
-        """
+        """현재 hvac 모드를 반환합니다."""
         if self.is_on:
-            return HVAC_MODE_HEAT
-        return HVAC_MODE_OFF
-
-    @property
-    def hvac_modes(self):
-        """Return the list of available hvac operation modes.
-        Need to be a subset of HVAC_MODES.
-        """
-        return [HVAC_MODE_OFF, HVAC_MODE_HEAT]
+            return HVACMode.HEAT
+        return HVACMode.OFF
 
     async def async_set_temperature(self, **kwargs):
-        """Set new target temperature."""
+        """새 목표 온도를 설정합니다."""
         if self.is_on is False:
-            await self.device.turn_on()
-        temperature = kwargs.get(ATTR_TEMPERATURE)
-        if temperature is None:
+            await self._api.async_turn_on(self._node_id)
+        if (temperature := kwargs.get(ATTR_TEMPERATURE)) is None:
             return
-        await self.device.mode_heat('{:X}'.format(int(temperature)))
-
-    @property
-    def preset_modes(self):
-        """Return a list of available preset modes.
-        Requires SUPPORT_PRESET_MODE.
-        """
-        return [STATE_HEAT, STATE_BATH, STATE_RESERVATION,
-                STATE_RESERVATION_REPEAT, STATE_AWAY]
+        self._req_mode = '0102'
+        await self._api.async_mode_heat(self._parent_id, self._node_id, '{:X}'.format(int(temperature)))
 
     @property
     def preset_mode(self):
-        """Return the current preset mode, e.g., home, away, temp.
-        Requires SUPPORT_PRESET_MODE.
-        """
-        operation_mode = self.result['deviceMode']
+        """현재 프리셋 모드를 반환합니다."""
+        operation_mode = self._result['deviceMode']
         if operation_mode == '0102':
-            return STATE_HEAT
+            return PresetMode.HEAT
         elif operation_mode == '0105':
-            return STATE_BATH
+            return PresetMode.BATH
         elif operation_mode == '0107':
-            return STATE_RESERVATION
+            return PresetMode.RESERVATION
         elif operation_mode == '0108':
-            return STATE_RESERVATION_REPEAT
+            return PresetMode.RESERVATION_REPEAT
         elif operation_mode == '0106':
-            return STATE_AWAY
+            return PresetMode.AWAY
         else:
-            return STATE_HEAT
+            return PresetMode.HEAT
 
     async def async_set_preset_mode(self, preset_mode):
-        """Set new preset mode."""
-
+        """새로운 목표 프리셋 모드를 설정합니다."""
         if self.is_on is False:
-            await self.device.turn_on()
-        if preset_mode == STATE_HEAT:
-            await self.device.mode_heat()
-        elif preset_mode == STATE_BATH:
-            await self.device.mode_bath()
-        elif preset_mode == STATE_RESERVATION:
-            await self.device.mode_reservation()
-        elif preset_mode == STATE_RESERVATION_REPEAT:
-            await self.device.mode_reservation_repeat()
-        elif preset_mode == STATE_AWAY:
-            await self.device.mode_away()
+            self._req_mode = '0102'
+            await self._api.async_turn_on(self._node_id)
+            await asyncio.sleep(1)
+        if preset_mode == PresetMode.HEAT:
+            self._req_mode = '0102'
+            await self._api.async_mode_heat(self._parent_id, self._node_id)
+        elif preset_mode == PresetMode.BATH:
+            self._req_mode = '0105'
+            await self._api.async_mode_bath(self._parent_id, self._node_id)
+        elif preset_mode == PresetMode.RESERVATION:
+            self._req_mode = '0107'
+            await self._api.async_mode_reservation(self._parent_id, self._node_id)
+        elif preset_mode == PresetMode.RESERVATION_REPEAT:
+            self._req_mode = '0108'
+            await self._api.async_mode_reservation_repeat(self._parent_id, self._node_id)
+        elif preset_mode == PresetMode.AWAY:
+            self._req_mode = '0106'
+            await self._api.async_mode_away(self._node_id)
         else:
-            _LOGGER.error("Unrecognized operation mode: %s", preset_mode)
+            _LOGGER.error(f"알 수 없는 작업 모드: {preset_mode}")
 
     async def async_set_hvac_mode(self, hvac_mode):
-        """Set new target hvac mode."""
-        if hvac_mode == HVAC_MODE_HEAT:
-            await self.device.turn_on()
-        elif hvac_mode == HVAC_MODE_OFF:
-            await self.device.turn_off()
+        """새로운 hvac 모드를 설정합니다."""
+        if hvac_mode == HVACMode.HEAT:
+            self._req_mode = '0102'
+            await self._api.async_turn_on(self._node_id)
+        elif hvac_mode == HVACMode.OFF:
+            self._req_mode = '0101'
+            await self._api.async_turn_off(self._node_id)
+        await asyncio.sleep(1)
 
     async def async_update(self):
-        """Retrieve latest state."""
-        await self.device.is_alive()
-        self.result = await self.device.device_mode_info()
+        """최신 상태를 업데이트 합니다.
+         {'studyYn': 'Y', 'code': '100', 'deviceAlias': '보일러 1', 'message': 'Success.','slaveId': '01', 'deviceMode': '0101', 'slaveAlias': 'st-kiturami',
+         'option3': '01', 'actionId': '0102', 'option1': '00', 'currentTemp': '18', 'option2': '00', 'nodeId': '12010100:12:005321', 'value': '18'}
+        """
+        now = datetime.datetime.now()
+        if not self._req_mode and self._last_updated and now - self._last_updated < self._min_time_between_updates:
+            return
+        self._alive = await self._api.async_get_alive(self._parent_id, self._node_id)
+        for try_cnt in range(3):
+            self._result = await self._api.async_device_mode_info(self._parent_id, self._node_id)
+            if not self._req_mode or self._result['deviceMode'] == self._req_mode:
+                self._last_updated = now
+                break
+            await asyncio.sleep(1)
+
+        self._req_mode = None

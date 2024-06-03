@@ -1,0 +1,21 @@
+{
+  "title": "귀뚜라미",
+  "config": {
+    "abort": {
+      "already_configured": "장치가 이미 구성되었습니다."
+    },
+    "error": {
+      "invalid_login": "로그인에 실패했습니다. 아이디 또는 비밀번호를 확인해주세요.",
+      "unknown": "Unexpected error"
+    },
+    "step": {
+      "user": {
+        "data": {
+          "username": "아이디",
+          "password": "비밀번호",
+          "scan_interval": "동기화 간격 (분)"
+        }
+      }
+    }
+  }
+}
