@@ -30,9 +30,7 @@ async def async_validate_auth(api: AirKoreaAPI) -> dict[str, Any]:
     try:
         await api.async_get()
     except AirKoreaError:
-        errors["base"] = "invalid_login"
-    finally:
-        await api.close_session()
+        errors["base"] = "invalid_auth"
     return errors
 
 

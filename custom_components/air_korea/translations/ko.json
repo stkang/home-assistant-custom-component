@@ -14,7 +14,7 @@
           "api_key": "API 키",
           "station_name": "측정소 이름"
         },
-        "description": "API_KEY(https://www.data.go.kr/tcs/dss/selectApiDataDetailView.do?publicDataPk=15073861), 측정소(https://www.airkorea.or.kr/web/realSearch)"
+        "description": "API_KEY (https://www.data.go.kr/tcs/dss/selectApiDataDetailView.do?publicDataPk=15073861)\n일반 인증키(Decoding)\n측정소 (https://www.airkorea.or.kr/web/realSearch)"
       }
     }
   }

@@ -1,7 +1,5 @@
 """동행 복권 통합 모듈"""
 
-from __future__ import annotations
-
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -17,7 +15,7 @@ type AirKoreaConfigEntry = ConfigEntry[AirKoreaCoordinator]  # noqa: F821
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: AirKoreaConfigEntry) -> bool:
-    """DH Lottery 설정 항목을 설정합니다."""
+    """설정 항목을 설정합니다."""
     api_key = entry.data[CONF_API_KEY]
     station_name = entry.data[CONF_STATION_NAME]
     api = AirKoreaAPI(api_key, station_name)
