@@ -195,9 +195,9 @@ class DhLotto645:
                 if len(_items) > 5:
                     raise DhLotto645Error("❗구매할 게임이 5개를 초과했습니다.")
                 for _idx, _item in enumerate(_items):
-                    if _item.mode == DhLotto645SelMode.MANUAL and len(_item.numbers) > 5:
+                    if _item.mode == DhLotto645SelMode.MANUAL and len(_item.numbers) > 6:
                         raise DhLotto645Error(
-                            f"❗{_idx + 1}번째 게임의 수동 선택 번호가 5개를 초과했습니다."
+                            f"❗{_idx + 1}번째 게임의 수동 선택 번호가 6개를 초과했습니다."
                         )
 
             async def _async_check_weekly_limit() -> int:
