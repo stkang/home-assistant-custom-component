@@ -6,8 +6,13 @@
 
 
 ## AirKorea 공기오염정보료
+https://github.com/stkang/ha-component-air-korea
 
 ## 귀뚜라미 IOT 보일러
+https://github.com/stkang/ha-component-kiturami
+
+## 동행복권: 로또 6/45
+https://github.com/stkang/ha-component-dh-lottery
 
 ## 샤오미 제습기
 <pre>
