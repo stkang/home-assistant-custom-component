@@ -15,16 +15,12 @@ https://github.com/stkang/ha-component-kiturami
 https://github.com/stkang/ha-component-dh-lottery
 
 ## 샤오미 제습기
-<pre>
-climate:
-  - platform: kiturami
-    name: kiturami
-    username: !secret default_username
-    password: !secret default_password
-    scan_interval: 1800
-</pre>
+https://github.com/stkang/ha-component-xiaomi-dh
 
-## SK 날씨정보(지원 종료)
+## 현대HT: Imazu Wall Pad
+https://github.com/stkang/ha-component-imazu-wall-pad
+
+## ~~SK 날씨정보(지원 종료)~~
 
 
 **네이버 페이 후원하기**
